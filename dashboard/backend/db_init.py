@@ -16,4 +16,4 @@ CREATE TABLE IF NOT EXISTS sensor_data (
 
 conn.commit()
 conn.close()
-print("✅ 数据库已初始化")
+print("initiation done")
