@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Sidebar from "./layout/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Control from "./pages/Control";
+import DeviceOperationHistory from "./pages/OpHistory";
 // import other pages here if needed
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
             <Route path="/" element={<Dashboard />} /> 
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/control" element={<Control />} />
+            <Route path="/ophistory" element={<DeviceOperationHistory />} />
             {/* Add more jsroutes here */}
           </Routes>
         </div>

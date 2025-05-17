@@ -11,9 +11,8 @@ import { Link } from "react-router-dom";
 const menu = [
   { icon: <Home size={20} />, label: "Main Dashboard", to: "/dashboard" },
   { icon: <ToggleLeft size={20} />, label: "Control", to: "/control" },
-  { icon: <Table size={20} />, label: "Data Tables", to: "/tables" },
-  { icon: <User size={20} />, label: "Profile", to: "/profile" },
-  { icon: <Lock size={20} />, label: "Sign In", to: "/signin" },
+  { icon: <User size={20} />, label: "Operation History", to: "/ophistory" },
+  // { icon: <Lock size={20} />, label: "Sign In", to: "/signin" },
 ];
 
 

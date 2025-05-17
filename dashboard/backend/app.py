@@ -1,35 +1,152 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 import threading
 import requests
 import time
+import os
 
-# =========================
-# 🗃️ 初始化数据库
+# ========================= 
+# db init
 # =========================
 DB_FILE = "blynk_data.db"
 BLYNK_TOKEN = "FpQ6nvN9nATbU1E6qNbcfqU5XMmlYQI3"
-BLYNK_API = f"https://blynk.cloud/external/api/get?token={BLYNK_TOKEN}&v1&v2&v3&v6"
+BLYNK_API = f"https://blynk.cloud/external/api/get?token={BLYNK_TOKEN}&v1&v2&v3&v6&v7"
+BLYNK_WRITE_API = f"https://blynk.cloud/external/api/update?token={BLYNK_TOKEN}"
+
+
+
+
+DEFAULT_SETTINGS = {
+    "V8": 0,        # Smart Control default off
+    "V20": 40,      # Pump ON Threshold
+    "V21": 10,      # Fan Interval
+    "V22": 300,     # Lamp ON Threshold
+    "V23": 60,      # Pump OFF Threshold
+    "V24": 500,     # Lamp OFF Threshold
+    "V25": 5        # Fan Duration
+}
+def get_safe_connection():
+    return sqlite3.connect(DB_FILE, check_same_thread=False)
+
+
+def check_table_exists(conn, table_name):
+    """检查指定的表是否存在"""
+    cursor = conn.cursor()
+    cursor.execute(f"""
+        SELECT name 
+        FROM sqlite_master 
+        WHERE type='table' AND name='{table_name}';
+    """)
+    return cursor.fetchone() is not None
 
 def init_db():
+    # db init
+    db_exists = os.path.exists(DB_FILE)
+    
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sensor_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            soil_moisture REAL,
-            temperature REAL,
-            humidity REAL,
-            light REAL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+    
+    # 
+    if not check_table_exists(conn, "sensor_data"):
+        print("📊 Creating sensor_data table...")
+        cursor.execute('''
+            CREATE TABLE sensor_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                soil_moisture REAL,
+                temperature REAL,
+                humidity REAL,
+                light REAL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        print("✅ sensor_data table created")
+    else:
+        print("✅ sensor_data table already exists")
+    
+    # 
+    if not check_table_exists(conn, "control_history"):
+        print("📊 Creating control_history table...")
+        cursor.execute('''
+            CREATE TABLE control_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pin TEXT NOT NULL,
+                value REAL NOT NULL,
+                description TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        print("✅ control_history table created")
+    else:
+        print("✅ control_history table already exists")
+    
+    # 
+    if not check_table_exists(conn, "current_settings"):
+        print("📊 Creating current_settings table...")
+        cursor.execute('''
+            CREATE TABLE current_settings (
+                pin TEXT PRIMARY KEY,
+                value REAL NOT NULL,
+                description TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # default
+        for pin, value in DEFAULT_SETTINGS.items():
+            pin_descriptions = {
+                "V8": "Smart Control",
+                "V20": "Pump ON Threshold",
+                "V21": "Fan Interval",
+                "V22": "Lamp ON Threshold",
+                "V23": "Pump OFF Threshold",
+                "V24": "Lamp OFF Threshold",
+                "V25": "Fan Duration"
+            }
+            description = pin_descriptions.get(pin, f"Unknown Pin {pin}")
+            
+            cursor.execute('''
+                INSERT INTO current_settings (pin, value, description)
+                VALUES (?, ?, ?)
+            ''', (pin, value, description))
+        
+        print("✅ current_settings table created with default values")
+    else:
+        print("✅ current_settings table already exists")
+    
+    # check if op hist exist
+    if not check_table_exists(conn, "device_operation_history"):
+        cursor.execute('''
+            CREATE TABLE device_operation_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device TEXT NOT NULL,
+                status INTEGER NOT NULL,  -- 1表示开启，0表示关闭
+                start_time DATETIME NOT NULL,
+                end_time DATETIME,        -- NULL表示设备仍在运行
+                duration INTEGER,         -- 运行时长（秒）
+                reason TEXT               -- 操作原因（例如：智能控制、手动操作）
+            )
+        ''')
+    if not check_table_exists(conn, "device_current_status"):
+        cursor.execute('''
+            CREATE TABLE device_current_status (
+                device TEXT PRIMARY KEY,
+                status INTEGER NOT NULL,  -- 1表示开启，0表示关闭
+                since DATETIME NOT NULL,  -- 当前状态开始时间
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+    
     conn.commit()
     conn.close()
+    
+    if db_exists:
+        print("✅ Database already existed, checked/created necessary tables")
+    else:
+        print("✅ Database newly created with all necessary tables")
 
-# =========================
-# 💾 保存数据
+# ========================= 
+# save current data
 # =========================
 def save_to_db(soil, temp, hum, light):
     conn = sqlite3.connect(DB_FILE)
@@ -38,12 +155,67 @@ def save_to_db(soil, temp, hum, light):
         INSERT INTO sensor_data (soil_moisture, temperature, humidity, light)
         VALUES (?, ?, ?, ?)
     ''', (soil, temp, hum, light))
-    print("✅ Inserted:", soil, temp, hum, light)
+    print("✅ Inserted sensor data:", soil, temp, hum, light)
     conn.commit()
     conn.close()
 
-# =========================
-# 🔄 定时采集数据（后台运行）
+
+def save_control_setting(pin, value):
+
+    pin_descriptions = {
+        "V8": "Smart Control",
+        "V20": "Pump ON Threshold",
+        "V21": "Fan Interval",
+        "V22": "Lamp ON Threshold",
+        "V23": "Pump OFF Threshold",
+        "V24": "Lamp OFF Threshold",
+        "V25": "Fan Duration"
+    }
+    
+    description = pin_descriptions.get(pin, f"Unknown Pin {pin}")
+    
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # 确保表存在
+    if not check_table_exists(conn, "control_history"):
+        cursor.execute('''
+            CREATE TABLE control_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pin TEXT NOT NULL,
+                value REAL NOT NULL,
+                description TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+    
+    if not check_table_exists(conn, "current_settings"):
+        cursor.execute('''
+            CREATE TABLE current_settings (
+                pin TEXT PRIMARY KEY,
+                value REAL NOT NULL,
+                description TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+    
+
+    cursor.execute('''
+        INSERT INTO control_history (pin, value, description)
+        VALUES (?, ?, ?)
+    ''', (pin, value, description))
+    
+    cursor.execute('''
+        REPLACE INTO current_settings (pin, value, description, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ''', (pin, value, description))
+    
+    print(f"✅ Saved control setting: {description} ({pin}) = {value}")
+    conn.commit()
+    conn.close()
+
+# ========================= 
+# updating from Blynk 
 # =========================
 def collect_loop():
     while True:
@@ -56,13 +228,14 @@ def collect_loop():
             print("❌ Error:", e)
         time.sleep(10)
 
-# =========================
-# 🌐 Flask 接口部分
+# ========================= 
+#  Flask 
 # =========================
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000","http://192.168.0.186:3000"])
 
-# @app.route("/latest")
+
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
 @app.route("/latest", methods=["GET", "OPTIONS"])
 def get_latest():
     conn = sqlite3.connect(DB_FILE)
@@ -70,7 +243,7 @@ def get_latest():
     cursor.execute("SELECT timestamp, soil_moisture, temperature, humidity, light FROM sensor_data ORDER BY id DESC LIMIT 1")
     row = cursor.fetchone()
     conn.close()
-
+    
     if row:
         return jsonify({
             "timestamp": row[0],
@@ -81,7 +254,6 @@ def get_latest():
         })
     return jsonify({"error": "No data"})
 
-# @app.route("/history")
 @app.route("/history", methods=["GET", "OPTIONS"])
 def get_history():
     conn = sqlite3.connect(DB_FILE)
@@ -89,36 +261,278 @@ def get_history():
     cursor.execute("SELECT timestamp, soil_moisture, temperature, humidity, light FROM sensor_data ORDER BY id DESC LIMIT 50")
     rows = cursor.fetchall()
     conn.close()
-
+    
     history = [
         {"timestamp": ts, "soil": s, "temp": t, "humidity": h, "light": l}
         for ts, s, t, h, l in rows
     ]
     return jsonify(history)
 
+# current setting
+@app.route("/current-settings", methods=["GET"])
+def get_current_settings():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+
+    if not check_table_exists(conn, "current_settings"):
+
+        conn.close()
+        return jsonify(DEFAULT_SETTINGS)
+    
+    cursor.execute("SELECT pin, value FROM current_settings")
+    rows = cursor.fetchall()
+    conn.close()
+    
+
+    settings = {row["pin"]: row["value"] for row in rows}
+    
+
+    for pin, default_value in DEFAULT_SETTINGS.items():
+        if pin not in settings:
+            settings[pin] = default_value
+    
+    return jsonify(settings)
+
+# smart control
+@app.route("/set-smart-param", methods=["POST", "OPTIONS"])
+def set_smart_param():
+    print(f"🔔 Received request at /set-smart-param, method: {request.method}")
+    
+
+    if request.method == "OPTIONS":
+        print("🔔 Handling OPTIONS request")
+        return "", 200
+    
+    try:
+        print("🔔 Trying to parse JSON data...")
+        data = request.json
+        print(f"🔔 Parsed JSON: {data}")
+        
+        pin = data.get("pin")
+        value = data.get("value")
+        
+        if not pin or value is None:
+            print("❌ Missing pin or value in request")
+            return jsonify({"error": "Missing pin or value"}), 400
+        
+        print(f"🔔 Processing pin={pin}, value={value}")
+        
+
+        save_control_setting(pin, value)
+        
+        url = f"{BLYNK_WRITE_API}&{pin}={value}"
+        
+        print(f"🔔 Sending request to Blynk: {url}")
+        
+        response = requests.get(url)
+        if response.status_code == 200:
+            print(f"✅ Successfully set {pin} to {value}")
+            return jsonify({"status": "success"})
+        else:
+            print(f"❌ Failed to set {pin} to {value}: {response.text}")
+            return jsonify({"error": f"Blynk API error: {response.text}"}), 500
+    except Exception as e:
+        print(f"❌ Exception in set_smart_param: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+# get control history
+@app.route("/control-history", methods=["GET", "OPTIONS"])
+def get_control_history():
+    limit = request.args.get('limit', 50, type=int)
+    
+    conn = sqlite3.connect(DB_FILE)
+    
+
+    if not check_table_exists(conn, "control_history"):
+        conn.close()
+        return jsonify([])  
+    
+
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, pin, value, description, timestamp FROM control_history ORDER BY id DESC LIMIT ?", 
+        (limit,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    
+
+    history = [dict(row) for row in rows]
+    return jsonify(history)
+
+
+
+
 @app.route("/")
 def home():
     return "✅ Flask backend is running!"
 
 
+#----------
+from datetime import datetime
+
+@app.route("/control-device", methods=["POST"])
+def control_device():
+    try:
+        data = request.json
+        device = data.get("device")
+        status = int(data.get("status"))
+        reason = data.get("reason", "Manual control")
+
+        if device not in ["pump", "lamp", "fan"]:
+            return jsonify({"error": "Invalid device"}), 400
+        if status not in [0, 1]:
+            return jsonify({"error": "Invalid status"}), 400
+
+        now = datetime.now().isoformat()  # use ISO 8601 format
+
+        with get_safe_connection() as conn:
+            cursor = conn.cursor()
+
+            # 1. Update current status
+            cursor.execute('''
+                INSERT OR REPLACE INTO device_current_status (device, status, since, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (device, status, now))
+
+            # 2. Update operation history
+            if status == 1:
+                cursor.execute('''
+                    INSERT INTO device_operation_history (device, status, start_time, reason)
+                    VALUES (?, ?, ?, ?)
+                ''', (device, status, now, reason))
+            else:
+                cursor.execute('''
+                    SELECT id, start_time FROM device_operation_history
+                    WHERE device = ? AND status = 1 AND end_time IS NULL
+                    ORDER BY id DESC LIMIT 1
+                ''', (device,))
+                row = cursor.fetchone()
+                if row:
+                    op_id, start_time = row
+                    start_dt = datetime.fromisoformat(start_time)
+                    now_dt = datetime.fromisoformat(now)
+                    duration = int((now_dt - start_dt).total_seconds())
+                    cursor.execute('''
+                        UPDATE device_operation_history
+                        SET end_time = ?, duration = ?
+                        WHERE id = ?
+                    ''', (now, duration, op_id))
+            # send to Blynk
+            device_to_pin = {
+                "pump": "V4",
+                "lamp": "V11",
+                "fan":  "V7"
+            }
+
+            blynk_pin = device_to_pin.get(device)
+            if blynk_pin:
+                blynk_url = f"{BLYNK_WRITE_API}&{blynk_pin}={status}"
+                try:
+                    blynk_response = requests.get(blynk_url)
+                    print(f"📤 Sent to Blynk: {blynk_url}, Response: {blynk_response.status_code}")
+                except Exception as e:
+                    print(f"❌ Failed to update Blynk pin {blynk_pin}: {e}")
+
+            conn.commit()
+
+
+        print(f"✅ Updated {device} status to {status}")
+        return jsonify({"status": "success", "device": device, "new_status": status})
+
+    except Exception as e:
+        print(f"❌ Exception in control_device: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ------------------------------------
+@app.route("/device-history", methods=["GET"])
+def get_device_history():
+    try:
+        device = request.args.get("device")
+        status = request.args.get("status")
+        reason = request.args.get("reason")
+        start_date = request.args.get("start_date")
+        end_date = request.args.get("end_date")
+        sort = request.args.get("sort", "start_time")
+        order = request.args.get("order", "desc")
+
+        with get_safe_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            query = "SELECT * FROM device_operation_history WHERE 1=1"
+            params = []
+
+            if device:
+                query += " AND device = ?"
+                params.append(device)
+            if status is not None and status != "":
+                query += " AND status = ?"
+                params.append(int(status))
+            if reason:
+                query += " AND reason LIKE ?"
+                params.append(f"%{reason}%")
+            if start_date and end_date:
+                query += " AND start_time BETWEEN ? AND ?"
+                params.append(start_date)
+                params.append(end_date)
+
+            if sort not in ["device", "status", "start_time", "end_time", "duration", "reason"]:
+                sort = "start_time"
+            if order.lower() not in ["asc", "desc"]:
+                order = "desc"
+            query += f" ORDER BY {sort} {order.upper()}"
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            result = [dict(row) for row in rows]
+            return jsonify(result)
+
+    except Exception as e:
+        print("❌ Error in /device-history:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+
+@app.route("/device-status", methods=["GET"])
+def get_device_status():
+    try:
+        with get_safe_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT device, status FROM device_current_status")
+            rows = cursor.fetchall()
+        devices = [{"device": row[0], "status": row[1]} for row in rows]
+        return jsonify({"devices": devices})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+
+
+
+# CORS
 @app.after_request
 def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
 
-# =========================
-# 🚀 主程序入口
+# ========================= 
+# main app
 # =========================
 if __name__ == "__main__":
     init_db()
-
-    # 启动采集线程
+    
     collector_thread = threading.Thread(target=collect_loop, daemon=True)
     collector_thread.start()
-
-    # 启动 Flask
-    app.run(debug=True, port=5000)
-
-
+    
+    # start Flask
+    print("🚀 Starting Flask server on http://localhost:5050")
+    app.run(debug=True, port=5050, host="0.0.0.0")

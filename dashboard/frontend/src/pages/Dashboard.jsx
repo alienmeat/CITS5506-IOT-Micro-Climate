@@ -1,4 +1,3 @@
-// ✅ Dashboard.jsx：加入 Chart.js 折线图展示历史温湿度数据
 import React, { useEffect, useState } from "react";
 import { Card, CardContent } from "../components/ui/card";
 import { Line } from "react-chartjs-2";
@@ -23,8 +22,8 @@ ChartJS.register(
   Legend
 );
 
-const API_LATEST = "http://127.0.0.1:5000/latest";
-const API_HISTORY = "http://127.0.0.1:5000/history";
+const API_LATEST = "http://127.0.0.1:5050/latest";
+const API_HISTORY = "http://127.0.0.1:5050/history";
 
 function formatLocalTime(utcString) {
   if (!utcString || utcString === "--") return "--";
@@ -54,7 +53,7 @@ export default function Dashboard() {
         const json = await res.json();
         setData(json);
       } catch (error) {
-        console.error("❌ 获取 Flask 最新数据失败：", error);
+        console.error("❌ get Flask latest data failed：", error);
       }
     };
 
@@ -62,9 +61,9 @@ export default function Dashboard() {
       try {
         const res = await fetch(API_HISTORY);
         const json = await res.json();
-        setHistory(json.reverse()); // 保证时间顺序
+        setHistory(json.reverse()); 
       } catch (error) {
-        console.error("❌ 获取 Flask 历史数据失败：", error);
+        console.error("❌ get Flask Historical data failed：", error);
       }
     };
 
@@ -73,7 +72,7 @@ export default function Dashboard() {
     const interval = setInterval(() => {
       fetchData();
       fetchHistory();
-    }, 5000);
+    }, 5050);
 
     return () => clearInterval(interval);
   }, []);
@@ -107,7 +106,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#f4f7fe] p-6">
-      <h1 className="text-2xl font-bold mb-6">Smart Garden Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-6">Your Garden Dashboard</h1>
       <p className="text-sm text-gray-500 mb-4">
         Last updated: {formatLocalTime(data.timestamp)}
       </p>
