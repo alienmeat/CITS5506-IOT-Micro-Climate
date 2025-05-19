@@ -1,30 +1,35 @@
 import React from "react";
 
 /**
- * ToggleSwitch — компактный тумблер.
- * props:
- *   • label    — строка подписи
- *   • checked  — boolean
- *   • onChange — (bool) => void
+ * ToggleSwitch
+ *  • label     — подпись слева
+ *  • checked   — bool
+ *  • onChange  — (bool) => void
  */
-export default function ToggleSwitch({ checked, onChange, label }) {
+export default function ToggleSwitch({ label, checked, onChange }) {
   return (
     <div className="flex justify-between items-center w-full">
       <span className="text-sm text-gray-700 select-none">{label}</span>
 
-      <label className="inline-flex items-center cursor-pointer">
+      <label className="relative inline-block w-10 h-6 cursor-pointer">
         <input
           type="checkbox"
-          className="sr-only peer"
+          className="peer sr-only"
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
         />
-        <div className="w-10 h-6 bg-gray-400 peer-checked:bg-blue-500 rounded-full relative transition-colors">
-          <div
-            className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full
-                       transition-transform peer-checked:translate-x-4"
-          />
-        </div>
+        {/* трек */}
+        <span
+          className="block w-full h-full rounded-full
+                     bg-gray-400 peer-checked:bg-blue-500
+                     transition-colors"
+        />
+        {/* бегунок */}
+        <span
+          className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white
+                     transition-transform
+                     peer-checked:translate-x-4"
+        />
       </label>
     </div>
   );
