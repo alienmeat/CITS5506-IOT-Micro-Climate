@@ -5,17 +5,15 @@ import threading
 import requests
 import time
 import os
+from datetime import datetime
 
 # ========================= 
 # db init
 # =========================
 DB_FILE = "blynk_data.db"
 BLYNK_TOKEN = "FpQ6nvN9nATbU1E6qNbcfqU5XMmlYQI3"
-BLYNK_API = f"https://blynk.cloud/external/api/get?token={BLYNK_TOKEN}&v1&v2&v3&v6&v7"
+BLYNK_API = f"https://blynk.cloud/external/api/get?token={BLYNK_TOKEN}&v1&v2&v3&v6&v10"
 BLYNK_WRITE_API = f"https://blynk.cloud/external/api/update?token={BLYNK_TOKEN}"
-
-
-
 
 DEFAULT_SETTINGS = {
     "V8": 0,        # Smart Control default off
@@ -26,12 +24,12 @@ DEFAULT_SETTINGS = {
     "V24": 500,     # Lamp OFF Threshold
     "V25": 5        # Fan Duration
 }
+
 def get_safe_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
 
-
 def check_table_exists(conn, table_name):
-    """检查指定的表是否存在"""
+    """Check if the specified table exists"""
     cursor = conn.cursor()
     cursor.execute(f"""
         SELECT name 
@@ -47,7 +45,7 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # 
+    # Create sensor_data table if it doesn't exist
     if not check_table_exists(conn, "sensor_data"):
         print("📊 Creating sensor_data table...")
         cursor.execute('''
@@ -57,14 +55,26 @@ def init_db():
                 temperature REAL,
                 humidity REAL,
                 light REAL,
+                pressure REAL,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         print("✅ sensor_data table created")
     else:
         print("✅ sensor_data table already exists")
+        
+        # Check if we need to rename the Pressure column to pressure
+        try:
+            cursor.execute("SELECT Pressure FROM sensor_data LIMIT 1")
+            # If there's no error, column exists with capital P
+            print("⚠️ Renaming 'Pressure' column to 'pressure'...")
+            cursor.execute("ALTER TABLE sensor_data RENAME COLUMN Pressure TO pressure")
+            print("✅ Column renamed successfully")
+        except sqlite3.OperationalError:
+            # Column might not exist or is already lowercase
+            pass
     
-    # 
+    # Create control_history table if it doesn't exist
     if not check_table_exists(conn, "control_history"):
         print("📊 Creating control_history table...")
         cursor.execute('''
@@ -80,7 +90,7 @@ def init_db():
     else:
         print("✅ control_history table already exists")
     
-    # 
+    # Create current_settings table if it doesn't exist
     if not check_table_exists(conn, "current_settings"):
         print("📊 Creating current_settings table...")
         cursor.execute('''
@@ -92,7 +102,7 @@ def init_db():
             )
         ''')
         
-        # default
+        # Insert default settings
         for pin, value in DEFAULT_SETTINGS.items():
             pin_descriptions = {
                 "V8": "Smart Control",
@@ -114,25 +124,27 @@ def init_db():
     else:
         print("✅ current_settings table already exists")
     
-    # check if op hist exist
+    # Check if device operation history table exists
     if not check_table_exists(conn, "device_operation_history"):
         cursor.execute('''
             CREATE TABLE device_operation_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 device TEXT NOT NULL,
-                status INTEGER NOT NULL,  -- 1表示开启，0表示关闭
+                status INTEGER NOT NULL,  -- 1 for on, 0 for off
                 start_time DATETIME NOT NULL,
-                end_time DATETIME,        -- NULL表示设备仍在运行
-                duration INTEGER,         -- 运行时长（秒）
-                reason TEXT               -- 操作原因（例如：智能控制、手动操作）
+                end_time DATETIME,        -- NULL means device is still running
+                duration INTEGER,         -- Runtime in seconds
+                reason TEXT               -- Why the operation occurred (e.g., smart control, manual)
             )
         ''')
+    
+    # Check if device current status table exists
     if not check_table_exists(conn, "device_current_status"):
         cursor.execute('''
             CREATE TABLE device_current_status (
                 device TEXT PRIMARY KEY,
-                status INTEGER NOT NULL,  -- 1表示开启，0表示关闭
-                since DATETIME NOT NULL,  -- 当前状态开始时间
+                status INTEGER NOT NULL,  -- 1 for on, 0 for off
+                since DATETIME NOT NULL,  -- When the current status started
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -148,20 +160,18 @@ def init_db():
 # ========================= 
 # save current data
 # =========================
-def save_to_db(soil, temp, hum, light):
+def save_to_db(soil, temp, hum, light, pressure):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO sensor_data (soil_moisture, temperature, humidity, light)
-        VALUES (?, ?, ?, ?)
-    ''', (soil, temp, hum, light))
-    print("✅ Inserted sensor data:", soil, temp, hum, light)
+        INSERT INTO sensor_data (soil_moisture, temperature, humidity, light, pressure)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (soil, temp, hum, light, pressure))
+    print("✅ Inserted sensor data:", soil, temp, hum, light, pressure)
     conn.commit()
     conn.close()
 
-
 def save_control_setting(pin, value):
-
     pin_descriptions = {
         "V8": "Smart Control",
         "V20": "Pump ON Threshold",
@@ -177,7 +187,7 @@ def save_control_setting(pin, value):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # 确保表存在
+    # Make sure tables exist
     if not check_table_exists(conn, "control_history"):
         cursor.execute('''
             CREATE TABLE control_history (
@@ -199,12 +209,13 @@ def save_control_setting(pin, value):
             )
         ''')
     
-
+    # Insert into control history
     cursor.execute('''
         INSERT INTO control_history (pin, value, description)
         VALUES (?, ?, ?)
     ''', (pin, value, description))
     
+    # Update current settings
     cursor.execute('''
         REPLACE INTO current_settings (pin, value, description, updated_at)
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -223,25 +234,34 @@ def collect_loop():
             res = requests.get(BLYNK_API)
             data = res.json()
             print("📥 Received:", data)
-            save_to_db(data["v1"], data["v2"], data["v3"], data["v6"])
+            save_to_db(data["v1"], data["v2"], data["v3"], data["v6"], data["v10"])
+            
+            # Check if we need to perform smart control actions
+            # (This would go here if implemented)
+            
         except Exception as e:
             print("❌ Error:", e)
-        # can modify here
-        time.sleep(100000000)
+        
+        # Sleep for 10 seconds before next data collection
+        time.sleep(10)
 
 # ========================= 
 #  Flask 
 # =========================
 app = Flask(__name__)
-
-
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 @app.route("/latest", methods=["GET", "OPTIONS"])
 def get_latest():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT timestamp, soil_moisture, temperature, humidity, light FROM sensor_data ORDER BY id DESC LIMIT 1")
+    
+    try:
+        cursor.execute("SELECT timestamp, soil_moisture, temperature, humidity, light, pressure FROM sensor_data ORDER BY id DESC LIMIT 1")
+    except sqlite3.OperationalError:
+        # Try with capital P if lowercase didn't work
+        cursor.execute("SELECT timestamp, soil_moisture, temperature, humidity, light, Pressure FROM sensor_data ORDER BY id DESC LIMIT 1")
+    
     row = cursor.fetchone()
     conn.close()
     
@@ -251,7 +271,8 @@ def get_latest():
             "soil": row[1],
             "temp": row[2],
             "humidity": row[3],
-            "light": row[4]
+            "light": row[4],
+            "pressure": row[5]  # Return as lowercase for consistency
         })
     return jsonify({"error": "No data"})
 
@@ -259,26 +280,87 @@ def get_latest():
 def get_history():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT timestamp, soil_moisture, temperature, humidity, light FROM sensor_data ORDER BY id DESC LIMIT 50")
+    
+    try:
+        cursor.execute("SELECT timestamp, soil_moisture, temperature, humidity, light, pressure FROM sensor_data ORDER BY id DESC LIMIT 50")
+    except sqlite3.OperationalError:
+        # Try with capital P if lowercase didn't work
+        cursor.execute("SELECT timestamp, soil_moisture, temperature, humidity, light, Pressure FROM sensor_data ORDER BY id DESC LIMIT 50")
+    
     rows = cursor.fetchall()
     conn.close()
     
     history = [
-        {"timestamp": ts, "soil": s, "temp": t, "humidity": h, "light": l}
-        for ts, s, t, h, l in rows
+        {"timestamp": ts, "soil": s, "temp": t, "humidity": h, "light": l, "pressure": p}
+        for ts, s, t, h, l, p in rows
     ]
     return jsonify(history)
 
-# current setting
+@app.route("/stats", methods=["GET"])
+def get_stats():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # Get averages - handle both pressure column names
+    try:
+        # Try with lowercase first
+        cursor.execute("""
+            SELECT 
+                AVG(soil_moisture) as avg_soil,
+                AVG(temperature) as avg_temp,
+                AVG(humidity) as avg_humidity,
+                AVG(light) as avg_light,
+                AVG(pressure) as avg_pressure,
+                MAX(temperature) as max_temp,
+                MIN(temperature) as min_temp,
+                MAX(humidity) as max_humidity,
+                MIN(humidity) as min_humidity
+            FROM sensor_data
+            WHERE timestamp >= datetime('now', '-24 hours')
+        """)
+    except sqlite3.OperationalError:
+        # Try with capital P
+        cursor.execute("""
+            SELECT 
+                AVG(soil_moisture) as avg_soil,
+                AVG(temperature) as avg_temp,
+                AVG(humidity) as avg_humidity,
+                AVG(light) as avg_light,
+                AVG(Pressure) as avg_pressure,
+                MAX(temperature) as max_temp,
+                MIN(temperature) as min_temp,
+                MAX(humidity) as max_humidity,
+                MIN(humidity) as min_humidity
+            FROM sensor_data
+            WHERE timestamp >= datetime('now', '-24 hours')
+        """)
+    
+    stats = cursor.fetchone()
+    conn.close()
+    
+    if stats:
+        return jsonify({
+            "avg_soil": round(stats[0], 1) if stats[0] else 0,
+            "avg_temp": round(stats[1], 1) if stats[1] else 0,
+            "avg_humidity": round(stats[2], 1) if stats[2] else 0,
+            "avg_light": round(stats[3], 1) if stats[3] else 0,
+            "avg_pressure": round(stats[4], 1) if stats[4] else 0,
+            "max_temp": round(stats[5], 1) if stats[5] else 0,
+            "min_temp": round(stats[6], 1) if stats[6] else 0,
+            "max_humidity": round(stats[7], 1) if stats[7] else 0,
+            "min_humidity": round(stats[8], 1) if stats[8] else 0
+        })
+    
+    return jsonify({"error": "No data"})
+
+# Get current settings
 @app.route("/current-settings", methods=["GET"])
 def get_current_settings():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
-
     if not check_table_exists(conn, "current_settings"):
-
         conn.close()
         return jsonify(DEFAULT_SETTINGS)
     
@@ -286,22 +368,20 @@ def get_current_settings():
     rows = cursor.fetchall()
     conn.close()
     
-
     settings = {row["pin"]: row["value"] for row in rows}
     
-
+    # Fill in any missing settings with defaults
     for pin, default_value in DEFAULT_SETTINGS.items():
         if pin not in settings:
             settings[pin] = default_value
     
     return jsonify(settings)
 
-# smart control
+# Set smart control parameters
 @app.route("/set-smart-param", methods=["POST", "OPTIONS"])
 def set_smart_param():
     print(f"🔔 Received request at /set-smart-param, method: {request.method}")
     
-
     if request.method == "OPTIONS":
         print("🔔 Handling OPTIONS request")
         return "", 200
@@ -320,7 +400,6 @@ def set_smart_param():
         
         print(f"🔔 Processing pin={pin}, value={value}")
         
-
         save_control_setting(pin, value)
         
         url = f"{BLYNK_WRITE_API}&{pin}={value}"
@@ -338,19 +417,17 @@ def set_smart_param():
         print(f"❌ Exception in set_smart_param: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-# get control history
+# Get control history
 @app.route("/control-history", methods=["GET", "OPTIONS"])
 def get_control_history():
     limit = request.args.get('limit', 50, type=int)
     
     conn = sqlite3.connect(DB_FILE)
     
-
     if not check_table_exists(conn, "control_history"):
         conn.close()
         return jsonify([])  
     
-
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute(
@@ -360,20 +437,8 @@ def get_control_history():
     rows = cursor.fetchall()
     conn.close()
     
-
     history = [dict(row) for row in rows]
     return jsonify(history)
-
-
-
-
-@app.route("/")
-def home():
-    return "✅ Flask backend is running!"
-
-
-#----------
-from datetime import datetime
 
 @app.route("/control-device", methods=["POST"])
 def control_device():
@@ -440,7 +505,6 @@ def control_device():
 
             conn.commit()
 
-
         print(f"✅ Updated {device} status to {status}")
         return jsonify({"status": "success", "device": device, "new_status": status})
 
@@ -448,8 +512,6 @@ def control_device():
         print(f"❌ Exception in control_device: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-# ------------------------------------
 @app.route("/device-history", methods=["GET"])
 def get_device_history():
     try:
@@ -497,8 +559,6 @@ def get_device_history():
         print("❌ Error in /device-history:", e)
         return jsonify({"error": str(e)}), 500
 
-
-
 @app.route("/device-status", methods=["GET"])
 def get_device_status():
     try:
@@ -511,11 +571,9 @@ def get_device_status():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-
-
-
-
+@app.route("/")
+def home():
+    return "✅ Flask backend is running!"
 
 # CORS
 @app.after_request
