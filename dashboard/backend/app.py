@@ -7,6 +7,8 @@ import time
 import os
 from datetime import datetime
 from routes.notification_settings import bp_notification
+from routes.alerts import bp_alerts
+
 
 # ========================= 
 # db init
@@ -359,6 +361,7 @@ def collect_loop():
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 app.register_blueprint(bp_notification)
+app.register_blueprint(bp_alerts)
 
 @app.route("/latest", methods=["GET", "OPTIONS"])
 def get_latest():
