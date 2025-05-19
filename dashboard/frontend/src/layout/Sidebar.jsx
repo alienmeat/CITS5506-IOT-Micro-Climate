@@ -1,4 +1,4 @@
-import { Home, Table, User, Lock, ToggleLeft } from "lucide-react";
+import { Home, ToggleLeft, User, Bell } from "lucide-react";
 import { Link } from "react-router-dom";
 // const menu = [
 //   { icon: <Home size={20} />, label: "Main Dashboard" },
@@ -12,6 +12,7 @@ const menu = [
   { icon: <Home size={20} />, label: "Main Dashboard", to: "/dashboard" },
   { icon: <ToggleLeft size={20} />, label: "Control", to: "/control" },
   { icon: <User size={20} />, label: "Operation History", to: "/ophistory" },
+  { icon: <Bell size={20} />, label: "Notification Settings", to: "/notifications" },
   // { icon: <Lock size={20} />, label: "Sign In", to: "/signin" },
 ];
 
