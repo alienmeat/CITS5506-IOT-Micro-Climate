@@ -226,7 +226,8 @@ def collect_loop():
             save_to_db(data["v1"], data["v2"], data["v3"], data["v6"])
         except Exception as e:
             print("❌ Error:", e)
-        time.sleep(10)
+        # can modify here
+        time.sleep(100000000)
 
 # ========================= 
 #  Flask 
