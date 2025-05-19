@@ -14,8 +14,8 @@
 #include "pump_control.h"
 
 // WiFi credentials
-char ssid[] = "iH";
-char pass[] = "nihaonihao";
+char ssid[] = "marrowbone";
+char pass[] = "xihuanmdl";
 
 void setup() {
   Serial.begin(9600);
