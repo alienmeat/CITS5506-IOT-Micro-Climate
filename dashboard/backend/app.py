@@ -320,19 +320,38 @@ def is_smart_control_enabled_for_device(device):
 def collect_loop():
     while True:
         try:
-            res = requests.get(BLYNK_API)
+            res  = requests.get(BLYNK_API)
             data = res.json()
-            print("📥 Received:", data)
+            if "error" in data:
+                print("⛔ Blynk error:", data["error"].get("message"))
+                time.sleep(10)
+                continue
+
+            # 1) Запись в sensor_data
             save_to_db(data["v1"], data["v2"], data["v3"], data["v6"], data["v10"])
-            
-            # Check if we need to perform smart control actions
-            # (This would go here if implemented)
-            
+
+            # 2) Вычисление нарушений порогов
+            alerts = evaluate_thresholds(
+                temp=data["v2"],
+                humidity=data["v3"],
+                pressure=data["v10"],
+            )
+
+            # 3) Запись каждого события в таблицу alerts
+            for key, msg in alerts:
+                conn = sqlite3.connect(DB_FILE)
+                c    = conn.cursor()
+                c.execute(
+                    "INSERT INTO alerts(type, message) VALUES(?, ?)",
+                    (key, msg)
+                )
+                conn.commit()
+                conn.close()
+
         except Exception as e:
             print("❌ Error:", e)
-        
-        # Sleep for 10 seconds before next data collection
-        time.sleep(10000000)
+
+        time.sleep(10)
 
 # ========================= 
 #  Flask 
@@ -672,7 +691,45 @@ def add_cors_headers(response):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
+# ========================= 
+# notification logic
+# =========================
+def evaluate_thresholds(temp, humidity, pressure):
+    """
+    Чистая функция: сравнивает temp/humidity/pressure с порогами
+    из notification_settings и возвращает список (key, message).
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cur  = conn.cursor()
+    row = cur.execute("""
+        SELECT min_temp, max_temp,
+               min_humid, max_humid,
+               min_press, max_press,
+               cold_alert, heat_alert,
+               dry_alert, humid_alert,
+               low_press_alert, high_press_alert
+        FROM notification_settings WHERE id=1
+    """).fetchone()
+    conn.close()
+    if not row:
+        return []
 
+    (min_t, max_t,
+     min_h, max_h,
+     min_p, max_p,
+     flag_cold, flag_heat,
+     flag_dry, flag_humid,
+     flag_lowp, flag_highp) = row
+
+    events = []
+    if flag_cold  and temp     < min_t: events.append(("cold",      f"Temperature too low: {temp}°C"))
+    if flag_heat  and temp     > max_t: events.append(("heat",      f"Temperature too high: {temp}°C"))
+    if flag_dry   and humidity < min_h: events.append(("dry",       f"Humidity too low: {humidity}%"))
+    if flag_humid and humidity > max_h: events.append(("humid",     f"Humidity too high: {humidity}%"))
+    if flag_lowp  and pressure < min_p: events.append(("low_press", f"Pressure too low: {pressure} hPa"))
+    if flag_highp and pressure > max_p: events.append(("high_press",f"Pressure too high: {pressure} hPa"))
+
+    return events
 # ========================= 
 # main app
 # =========================
