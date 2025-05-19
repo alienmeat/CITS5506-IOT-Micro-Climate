@@ -8,7 +8,7 @@ import NotificationSettings from "./pages/NotificationSettings";
 import useAlerts from "./hooks/useAlerts";        // ⟵ polling /alerts
 
 export default function App() {
-  useAlerts();                                    // запускаем опрос
+  useAlerts();        // start polling alerts
 
   return (
     <Router>

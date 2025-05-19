@@ -1,19 +1,19 @@
 import { useEffect } from "react";
 
 /**
- * useAlerts — опрашивает бэкэнд /alerts и показывает простые всплывашки.
- * @param {number} interval Интервал опроса в миллисекундах. По умолчанию 10000 (10 сек).
+ * useAlerts - polls backend /alerts and shows simple pop-up notifications.
+ * @param {number} interval Polling interval in milliseconds. Default 10000 (10 sec).
  */
 export default function useAlerts(interval = 10000) {
   useEffect(() => {
-    // Функция опроса
+    // Polling function
     const checkAlerts = () => {
       fetch("/alerts")
         .then((res) => res.json())
         .then((data) => {
           if (Array.isArray(data) && data.length > 0) {
             data.forEach(({ type, message }) => {
-              // просто alert — позже можно заменить на toast
+              // Simple alert - can be replaced with toast later
               window.alert(message);
             });
           }
@@ -23,12 +23,12 @@ export default function useAlerts(interval = 10000) {
         });
     };
 
-    // первый вызов сразу при монтировании
+    // First call immediately on mount
     checkAlerts();
-    // и повторять каждые interval миллисекунд
+    // And repeat every interval milliseconds
     const timerId = setInterval(checkAlerts, interval);
 
-    // очистка при демонтировании
+    // Cleanup on unmount
     return () => clearInterval(timerId);
   }, [interval]);
 }

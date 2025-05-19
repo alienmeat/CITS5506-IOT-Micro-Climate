@@ -3,7 +3,7 @@ import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 
 /**
- * RangeSlider — двойной бегунок для min/max значений.
+ * RangeSlider - double slider for min/max values.
  */
 export default function RangeSlider({ label, min, max, step, values, onChange }) {
   const [low, high] = values;

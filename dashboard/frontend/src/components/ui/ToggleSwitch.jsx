@@ -2,10 +2,11 @@ import React from "react";
 
 /**
  * ToggleSwitch
- *  • label     — подпись слева
- *  • checked   — bool
- *  • onChange  — (bool) => void
+ *  • label     - left side label
+ *  • checked   - bool
+ *  • onChange  - (bool) => void
  */
+
 export default function ToggleSwitch({ label, checked, onChange }) {
   return (
     <div className="flex justify-between items-center w-full">
@@ -18,13 +19,13 @@ export default function ToggleSwitch({ label, checked, onChange }) {
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
         />
-        {/* трек */}
+        {/* track */}
         <span
           className="block w-full h-full rounded-full
                      bg-gray-400 peer-checked:bg-blue-500
                      transition-colors"
         />
-        {/* бегунок */}
+        {/* slider */}
         <span
           className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white
                      transition-transform
