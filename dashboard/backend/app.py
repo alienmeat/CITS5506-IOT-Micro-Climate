@@ -456,7 +456,7 @@ def collect_loop():
             print("❌ Error:", e)
         
         # Sleep for 10 seconds before next data collection
-        time.sleep(10000000)
+        time.sleep(10)
 
 # ========================= 
 #  Flask 
