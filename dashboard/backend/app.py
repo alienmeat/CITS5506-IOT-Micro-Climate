@@ -6,6 +6,7 @@ import requests
 import time
 import os
 from datetime import datetime
+from routes.notification_settings import bp_notification
 
 # ========================= 
 # db init
@@ -146,6 +147,29 @@ def init_db():
                     INSERT INTO current_settings (pin, value, description)
                     VALUES (?, ?, ?)
                 ''', (pin, 0, description))
+    
+    # 2) notification_settings  -----------------------------------
+    if not check_table_exists(conn, "notification_settings"):
+        print("📊 Creating notification_settings table...")
+        cursor.execute("""
+            CREATE TABLE notification_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                min_temp        INTEGER,
+                max_temp        INTEGER,
+                min_humid       INTEGER,
+                max_humid       INTEGER,
+                min_press       INTEGER,
+                max_press       INTEGER,
+                cold_alert      INTEGER,
+                heat_alert      INTEGER,
+                dry_alert       INTEGER,
+                humid_alert     INTEGER,
+                low_press_alert INTEGER,
+                high_press_alert INTEGER
+            )
+        """)
+        cursor.execute("INSERT INTO notification_settings (id) VALUES (1)")
+        print("✅ notification_settings table created")
     
     # Check if device operation history table exists
     if not check_table_exists(conn, "device_operation_history"):
@@ -315,6 +339,7 @@ def collect_loop():
 # =========================
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+app.register_blueprint(bp_notification)
 
 @app.route("/latest", methods=["GET", "OPTIONS"])
 def get_latest():
