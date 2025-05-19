@@ -3,6 +3,7 @@ import Sidebar from "./layout/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Control from "./pages/Control";
 import DeviceOperationHistory from "./pages/OpHistory";
+import NotificationSettings from "./pages/NotificationSettings";
 // import other pages here if needed
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/control" element={<Control />} />
             <Route path="/ophistory" element={<DeviceOperationHistory />} />
+            <Route path="/notifications" element={<NotificationSettings />} />
             {/* Add more jsroutes here */}
           </Routes>
         </div>
