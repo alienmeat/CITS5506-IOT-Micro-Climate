@@ -394,7 +394,7 @@ const Control = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-gray-600 mb-2">
-                    Run fan every (minutes):
+                    Run fan every (seconds):
                   </label>
                   <input
                     type="number"
@@ -407,7 +407,7 @@ const Control = () => {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-600 mb-2">
-                    Fan duration (minutes):
+                    Fan duration (seconds):
                   </label>
                   <input
                     type="number"
