@@ -1,6 +1,8 @@
-#define BLYNK_TEMPLATE_ID "TMPL6H5aW08du"
-#define BLYNK_TEMPLATE_NAME "smart garden"
-#define BLYNK_AUTH_TOKEN "FpQ6nvN9nATbU1E6qNbcfqU5XMmlYQI3"
+
+#define BLYNK_AUTH_TOKEN "upCmFhrusVTxhY0CqDYxOkeaoL90DeNZ"
+
+#define BLYNK_TEMPLATE_ID "TMPL6p_m1QMn9"
+#define BLYNK_TEMPLATE_NAME "Smart Garden"
 
 #include <Wire.h>
 #include <WiFi.h>
@@ -14,8 +16,8 @@
 #include "pump_control.h"
 
 // WiFi credentials
-char ssid[] = "marrowbone";
-char pass[] = "xihuanmdl";
+char ssid[] = "iH";
+char pass[] = "nihaonihao";
 
 // Smart Control Settings
 bool smartControlEnabled = false;                // V8
