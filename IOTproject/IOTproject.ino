@@ -16,8 +16,8 @@
 #include "pump_control.h"
 
 // WiFi credentials
-char ssid[] = "marrowbone";
-char pass[] = "xihuanmdl";
+char ssid[] = "iH";
+char pass[] = "nihaonihao";
 
 // Smart Control Settings
 bool smartControlEnabled = false;                // V8
