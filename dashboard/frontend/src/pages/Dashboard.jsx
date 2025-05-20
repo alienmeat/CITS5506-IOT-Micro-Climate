@@ -67,41 +67,28 @@ function formatShortTime(utcString) {
 
 // Define gauge component
 const GaugeChart = ({ value, min, max, title, unit, color }) => {
-  // Calculate percentage
   const percent = ((value - min) / (max - min)) * 100;
-  
+
   return (
     <div className="w-full h-full flex flex-col items-center justify-center">
       <div className="text-lg font-semibold mb-2">{title}</div>
       <div className="relative w-32 h-32">
-        {/* Background circle */}
-        <div className="absolute w-full h-full rounded-full border-8 border-gray-200"></div>
-        {/* Colored progress */}
-        <div 
-          className="absolute w-full h-full rounded-full border-8 border-transparent"
+      <div
+          className="absolute w-full h-full rounded-full"
           style={{
-            clipPath: `polygon(50% 50%, 0 0, ${percent <= 50 ? percent * 2 : 100}% 0)`,
-            borderColor: color,
+            background: `conic-gradient(${color} ${percent}%, #e5e7eb ${percent}%)`,
+            boxShadow: `0 0 10px ${color}`,
           }}
         ></div>
-        {/* Additional colored progress if over 50% */}
-        {percent > 50 && (
-          <div 
-            className="absolute w-full h-full rounded-full border-8 border-transparent"
-            style={{
-              clipPath: `polygon(50% 50%, 100% 0, 100% ${(percent - 50) * 2}%, ${100 - (percent - 50) * 2}% 100%)`,
-              borderColor: color,
-            }}
-          ></div>
-        )}
-        {/* Value display */}
+        <div className="absolute inset-2 rounded-full bg-white"></div>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-2xl font-bold">{value}{unit}</span>
+          <span className="text-2xl font-bold text-gray-800">{value}{unit}</span>
         </div>
       </div>
-      <div className="mt-2 flex justify-between w-full">
-        <span className="text-sm">{min}{unit}</span>
-        <span className="text-sm">{max}{unit}</span>
+
+      <div className="mt-2 flex justify-between w-full px-4 text-sm text-gray-500">
+        <span>{min}{unit}</span>
+        <span>{max}{unit}</span>
       </div>
     </div>
   );
@@ -234,29 +221,33 @@ export default function Dashboard() {
       {
         label: 'Temperature (°C)',
         data: history.slice(-24).map((d) => d.temp),
-        borderColor: 'rgba(239, 68, 68, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#ef4444', // red-500
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
         yAxisID: 'y',
         tension: 0.4,
+        fill: true,
       },
       {
         label: 'Humidity (%)',
         data: history.slice(-24).map((d) => d.humidity),
-        borderColor: 'rgba(59, 130, 246, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#3b82f6', // blue-500
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
         yAxisID: 'y',
         tension: 0.4,
+        fill: true,
       },
       {
         label: 'Pressure (hPa)',
         data: history.slice(-24).map((d) => d.pressure),
-        borderColor: 'rgba(139, 92, 246, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#8b5cf6', // purple-500
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
         yAxisID: 'y1',
         tension: 0.4,
+        fill: true,
       },
     ],
   };
+  
   
   // Light vs Soil chart
   const lightVsSoilData = {
@@ -265,21 +256,24 @@ export default function Dashboard() {
       {
         label: 'Light',
         data: history.slice(-24).map((d) => d.light),
-        borderColor: 'rgba(245, 158, 11, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#f59e0b', // amber-500
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
         yAxisID: 'y',
         tension: 0.4,
+        fill: true,
       },
       {
         label: 'Soil Moisture (%)',
         data: history.slice(-24).map((d) => d.soil),
-        borderColor: 'rgba(5, 150, 105, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#10b981', // emerald-500
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         yAxisID: 'y1',
         tension: 0.4,
+        fill: true,
       },
     ],
   };
+  
   
   // Daily stats comparison chart
   const dayStatsData = {
@@ -288,15 +282,16 @@ export default function Dashboard() {
       {
         label: 'Current',
         data: [data.temp, data.humidity, data.soil],
-        backgroundColor: 'rgba(99, 102, 241, 0.8)',
+        backgroundColor: ['#ef4444', '#3b82f6', '#10b981'], // red, blue, green
       },
       {
         label: '24h Average',
         data: [stats.avg_temp, stats.avg_humidity, stats.avg_soil],
-        backgroundColor: 'rgba(139, 92, 246, 0.5)',
+        backgroundColor: ['rgba(239, 68, 68, 0.3)', 'rgba(59, 130, 246, 0.3)', 'rgba(16, 185, 129, 0.3)'],
       },
     ],
   };
+  
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -315,7 +310,7 @@ export default function Dashboard() {
       
       {/* Current readings section */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <Card className="rounded-xl shadow-sm">
+        <Card className="rounded-xl shadow-sm transition-transform duration-300 hover:scale-105 motion-safe:animate-fade-in">
           <CardContent className="pt-6 px-3 pb-3">
             <GaugeChart 
               value={data.soil} 
@@ -386,7 +381,7 @@ export default function Dashboard() {
         {/* Left column */}
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Environmental trends */}
-          <Card className="rounded-xl shadow-sm md:col-span-2">
+          <Card className="rounded-xl shadow-sm md:col-span-2 transition-all duration-500 motion-safe:animate-slide-up hover:scale-[1.01]">
             <CardContent className="p-4">
               <div className="flex items-center mb-4">
                 <Wind className="w-5 h-5 text-indigo-500 mr-2" />
