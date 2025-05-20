@@ -11,7 +11,8 @@ from datetime import datetime
 # db init
 # =========================
 DB_FILE = "blynk_data.db"
-BLYNK_TOKEN = "FpQ6nvN9nATbU1E6qNbcfqU5XMmlYQI3"
+BLYNK_TOKEN = "upCmFhrusVTxhY0CqDYxOkeaoL90DeNZ"
+
 BLYNK_API = f"https://blynk.cloud/external/api/get?token={BLYNK_TOKEN}&v1&v2&v3&v6&v10"
 BLYNK_WRITE_API = f"https://blynk.cloud/external/api/update?token={BLYNK_TOKEN}"
 
