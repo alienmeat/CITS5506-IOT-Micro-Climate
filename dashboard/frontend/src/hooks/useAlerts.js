@@ -1,34 +1,48 @@
+// src/hooks/useAlerts.js
 import { useEffect } from "react";
 
 /**
- * useAlerts - polls backend /alerts and shows simple pop-up notifications.
- * @param {number} interval Polling interval in milliseconds. Default 10000 (10 sec).
+ * useAlerts — опрашивает endpoint /alerts каждые `interval` мс
+ * и выводит все принятые события через window.alert.
+ * Если endpoint недоступен, выведет ошибку в консоль.
+ *
+ * @param {number} interval — интервал в миллисекундах
  */
 export default function useAlerts(interval = 10000) {
   useEffect(() => {
-    // Polling function
+    // Если вы используете proxy в package.json — API = ""
+    // Иначе подставьте в .env REACT_APP_API_URL без http, 
+    // и здесь сделайте: const API = `http://${process.env.REACT_APP_API_URL}`;
+    const API = "";
+
     const checkAlerts = () => {
-      fetch("/alerts")
-        .then((res) => res.json())
+      console.log("[useAlerts] 🔄 polling /alerts");
+      fetch(`${API}/alerts`)
+        .then((res) => {
+          console.log("[useAlerts] ← status", res.status);
+          return res.json();
+        })
         .then((data) => {
+          console.log("[useAlerts] ← data", data);
           if (Array.isArray(data) && data.length > 0) {
-            data.forEach(({ type, message }) => {
-              // Simple alert - can be replaced with toast later
-              window.alert(message);
+            data.forEach((evt) => {
+              console.log(`[useAlerts] ⚠️ alert: ${evt.message}`);
+              window.alert(evt.message);
             });
           }
         })
         .catch((err) => {
-          console.error("Error fetching alerts:", err);
+          console.error("[useAlerts] ‼️ Error fetching alerts:", err);
         });
     };
 
-    // First call immediately on mount
+    // сразу проверить, а потом по расписанию
     checkAlerts();
-    // And repeat every interval milliseconds
     const timerId = setInterval(checkAlerts, interval);
-
-    // Cleanup on unmount
     return () => clearInterval(timerId);
   }, [interval]);
+
+  // Возвращаем «пустой» компонент, чтобы хватало синтаксиса <AlertNotification/>
+  const AlertNotification = () => null;
+  return { AlertNotification };
 }

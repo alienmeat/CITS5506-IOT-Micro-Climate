@@ -5,10 +5,11 @@ import Dashboard from "./pages/Dashboard";
 import Control from "./pages/Control";
 import DeviceOperationHistory from "./pages/OpHistory";
 import NotificationSettings from "./pages/NotificationSettings";
-import useAlerts from "./hooks/useAlerts";        // ⟵ polling /alerts
+import useAlerts from "./hooks/useAlerts";  // Using our improved hook
 
 export default function App() {
-  useAlerts();        // start polling alerts
+  // Get alert notification component
+  const { AlertNotification } = useAlerts(10000);  // Poll every 10 seconds
 
   return (
     <Router>
@@ -24,6 +25,9 @@ export default function App() {
           </Routes>
         </main>
       </div>
+      
+      {/* Render alert notifications */}
+      <AlertNotification />
     </Router>
   );
 }

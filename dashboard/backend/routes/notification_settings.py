@@ -18,7 +18,9 @@ def get_notification_settings():
     if not row:
         return jsonify({"error": "not found"}), 404
 
-    columns = [d[0] for d in db().execute("PRAGMA table_info(notification_settings)")]
+    columns = [d[1] for d in db().execute("PRAGMA table_info(notification_settings)")]
+   
+
     return jsonify(dict(zip(columns, row)))
 
 
