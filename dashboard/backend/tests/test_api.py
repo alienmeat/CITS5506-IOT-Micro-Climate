@@ -1,9 +1,13 @@
 import os
+import sys
+# Добавляем корневую директорию в sys.path, чтобы импортировать app.py
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import tempfile
 import pytest
 
 # Импортируем ваше Flask-приложение и функцию инициализации БД
 import app
+from app import app as flask_app, init_db, DB_FILE
 from app import app as flask_app, init_db, DB_FILE
 
 @pytest.fixture(autouse=True)
