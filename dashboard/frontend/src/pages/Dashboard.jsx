@@ -66,42 +66,29 @@ function formatShortTime(utcString) {
 }
 
 // Define gauge component
+// Define gauge component
 const GaugeChart = ({ value, min, max, title, unit, color }) => {
-  // Calculate percentage
   const percent = ((value - min) / (max - min)) * 100;
-  
+
   return (
     <div className="w-full h-full flex flex-col items-center justify-center">
       <div className="text-lg font-semibold mb-2">{title}</div>
       <div className="relative w-32 h-32">
-        {/* Background circle */}
-        <div className="absolute w-full h-full rounded-full border-8 border-gray-200"></div>
-        {/* Colored progress */}
-        <div 
-          className="absolute w-full h-full rounded-full border-8 border-transparent"
+        <div
+          className="absolute w-full h-full rounded-full"
           style={{
-            clipPath: `polygon(50% 50%, 0 0, ${percent <= 50 ? percent * 2 : 100}% 0)`,
-            borderColor: color,
+            background: `conic-gradient(${color} ${percent}%, #e5e7eb ${percent}%)`,
           }}
         ></div>
-        {/* Additional colored progress if over 50% */}
-        {percent > 50 && (
-          <div 
-            className="absolute w-full h-full rounded-full border-8 border-transparent"
-            style={{
-              clipPath: `polygon(50% 50%, 100% 0, 100% ${(percent - 50) * 2}%, ${100 - (percent - 50) * 2}% 100%)`,
-              borderColor: color,
-            }}
-          ></div>
-        )}
-        {/* Value display */}
+        <div className="absolute inset-2 rounded-full bg-white"></div>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-2xl font-bold">{value}{unit}</span>
+          <span className="text-2xl font-bold text-gray-800">{value}{unit}</span>
         </div>
       </div>
-      <div className="mt-2 flex justify-between w-full">
-        <span className="text-sm">{min}{unit}</span>
-        <span className="text-sm">{max}{unit}</span>
+
+      <div className="mt-2 flex justify-between w-full px-4 text-sm text-gray-500">
+        <span>{min}{unit}</span>
+        <span>{max}{unit}</span>
       </div>
     </div>
   );
