@@ -66,7 +66,6 @@ function formatShortTime(utcString) {
 }
 
 // Define gauge component
-// Define gauge component
 const GaugeChart = ({ value, min, max, title, unit, color }) => {
   const percent = ((value - min) / (max - min)) * 100;
 
@@ -74,10 +73,11 @@ const GaugeChart = ({ value, min, max, title, unit, color }) => {
     <div className="w-full h-full flex flex-col items-center justify-center">
       <div className="text-lg font-semibold mb-2">{title}</div>
       <div className="relative w-32 h-32">
-        <div
+      <div
           className="absolute w-full h-full rounded-full"
           style={{
             background: `conic-gradient(${color} ${percent}%, #e5e7eb ${percent}%)`,
+            boxShadow: `0 0 10px ${color}`,
           }}
         ></div>
         <div className="absolute inset-2 rounded-full bg-white"></div>
@@ -302,7 +302,7 @@ export default function Dashboard() {
       
       {/* Current readings section */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <Card className="rounded-xl shadow-sm">
+        <Card className="rounded-xl shadow-sm transition-transform duration-300 hover:scale-105 motion-safe:animate-fade-in">
           <CardContent className="pt-6 px-3 pb-3">
             <GaugeChart 
               value={data.soil} 
@@ -373,7 +373,7 @@ export default function Dashboard() {
         {/* Left column */}
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Environmental trends */}
-          <Card className="rounded-xl shadow-sm md:col-span-2">
+          <Card className="rounded-xl shadow-sm md:col-span-2 transition-all duration-500 motion-safe:animate-slide-up hover:scale-[1.01]">
             <CardContent className="p-4">
               <div className="flex items-center mb-4">
                 <Wind className="w-5 h-5 text-indigo-500 mr-2" />
