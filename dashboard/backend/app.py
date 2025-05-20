@@ -6,13 +6,15 @@ import requests
 import time
 import os
 from datetime import datetime
+from routes.notification_settings import bp_notification
+from routes.alerts import bp_alerts
+
 
 # ========================= 
 # db init
 # =========================
 DB_FILE = "blynk_data.db"
 BLYNK_TOKEN = "upCmFhrusVTxhY0CqDYxOkeaoL90DeNZ"
-
 BLYNK_API = f"https://blynk.cloud/external/api/get?token={BLYNK_TOKEN}&v1&v2&v3&v6&v10"
 BLYNK_WRITE_API = f"https://blynk.cloud/external/api/update?token={BLYNK_TOKEN}"
 
@@ -43,42 +45,59 @@ def check_table_exists(conn, table_name):
     return cursor.fetchone() is not None
 
 def init_db():
-    # db init
-    db_exists = os.path.exists(DB_FILE)
-    
-    conn = sqlite3.connect(DB_FILE)
+    """
+    Инициализация базы данных:
+      1. sensor_data
+      2. control_history
+      3. current_settings
+      4. notification_settings (с дефолтными значениями)
+      5. alerts
+    """
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     cursor = conn.cursor()
-    
-    # Create sensor_data table if it doesn't exist
+
+    # 1) sensor_data
     if not check_table_exists(conn, "sensor_data"):
         print("📊 Creating sensor_data table...")
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE sensor_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                soil_moisture REAL,
-                temperature REAL,
-                humidity REAL,
-                light REAL,
-                pressure REAL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                soil_moisture  REAL,
+                temperature    REAL,
+                humidity       REAL,
+                light          REAL,
+                pressure       REAL,
+                timestamp      DATETIME DEFAULT CURRENT_TIMESTAMP
             )
-        ''')
+        """)
         print("✅ sensor_data table created")
     else:
         print("✅ sensor_data table already exists")
-        
-        # Check if we need to rename the Pressure column to pressure
+        # — если таблица есть, но в старом формате, переименуем колонки:
+        #  soil    → soil_moisture
+        try:
+            cursor.execute("SELECT soil_moisture FROM sensor_data LIMIT 1")
+        except sqlite3.OperationalError:
+            print("⚠️ Renaming 'soil' → 'soil_moisture'")
+            cursor.execute("ALTER TABLE sensor_data RENAME COLUMN soil TO soil_moisture")
+            print("✅ soil → soil_moisture renamed")
+        #  temp    → temperature
+        try:
+            cursor.execute("SELECT temperature FROM sensor_data LIMIT 1")
+        except sqlite3.OperationalError:
+            print("⚠️ Renaming 'temp' → 'temperature'")
+            cursor.execute("ALTER TABLE sensor_data RENAME COLUMN temp TO temperature")
+            print("✅ temp → temperature renamed")
+        #  Pressure → pressure (если ещё не переименован)
         try:
             cursor.execute("SELECT Pressure FROM sensor_data LIMIT 1")
-            # If there's no error, column exists with capital P
-            print("⚠️ Renaming 'Pressure' column to 'pressure'...")
+            print("⚠️ Renaming 'Pressure' → 'pressure'")
             cursor.execute("ALTER TABLE sensor_data RENAME COLUMN Pressure TO pressure")
-            print("✅ Column renamed successfully")
+            print("✅ Pressure → pressure renamed")
         except sqlite3.OperationalError:
-            # Column might not exist or is already lowercase
             pass
-    
-    # Create control_history table if it doesn't exist
+
+    # 2) control_history
     if not check_table_exists(conn, "control_history"):
         print("📊 Creating control_history table...")
         cursor.execute('''
@@ -93,8 +112,8 @@ def init_db():
         print("✅ control_history table created")
     else:
         print("✅ control_history table already exists")
-    
-    # Create current_settings table if it doesn't exist
+
+    # 3) current_settings
     if not check_table_exists(conn, "current_settings"):
         print("📊 Creating current_settings table...")
         cursor.execute('''
@@ -110,9 +129,9 @@ def init_db():
         for pin, value in DEFAULT_SETTINGS.items():
             pin_descriptions = {
                 "V8": "Smart Control",
-                "V26": "Smart Pump Control",
-                "V27": "Smart Lamp Control",
-                "V28": "Smart Fan Control",
+                "V9": "Smart Pump Control",
+                "V10": "Smart Lamp Control",
+                "V11": "Smart Fan Control",
                 "V20": "Pump ON Threshold",
                 "V21": "Fan Interval",
                 "V22": "Lamp ON Threshold",
@@ -147,29 +166,63 @@ def init_db():
                     INSERT INTO current_settings (pin, value, description)
                     VALUES (?, ?, ?)
                 ''', (pin, 0, description))
-    
-    # Create remembered_smart_controls table if it doesn't exist
-    if not check_table_exists(conn, "remembered_smart_controls"):
-        print("📊 Creating remembered_smart_controls table...")
-        cursor.execute('''
-            CREATE TABLE remembered_smart_controls (
-                pin TEXT PRIMARY KEY,
-                value INTEGER NOT NULL,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+
+    # 4) notification_settings
+    if not check_table_exists(conn, "notification_settings"):
+        print("📊 Creating notification_settings table...")
+        cursor.execute("""
+            CREATE TABLE notification_settings (
+                id                 INTEGER PRIMARY KEY CHECK (id = 1),
+                min_temp           INTEGER,
+                max_temp           INTEGER,
+                min_humid          INTEGER,
+                max_humid          INTEGER,
+                min_press          INTEGER,
+                max_press          INTEGER,
+                cold_alert         INTEGER,
+                heat_alert         INTEGER,
+                dry_alert          INTEGER,
+                humid_alert        INTEGER,
+                low_press_alert    INTEGER,
+                high_press_alert   INTEGER
             )
-        ''')
-        
-        # Initialize with default values
-        remembered_pins = ["V26", "V27", "V28"]
-        for pin in remembered_pins:
-            cursor.execute('''
-                INSERT INTO remembered_smart_controls (pin, value)
-                VALUES (?, ?)
-            ''', (pin, 0))
-        
-        print("✅ remembered_smart_controls table created with default values")
+        """)
+        cursor.execute("INSERT INTO notification_settings (id) VALUES (1)")
+        print("✅ notification_settings table created")
+
+        # Инициализируем notification_settings дефолтными значениями
+        print("🔧 Initializing notification_settings with defaults")
+        cursor.execute("""
+            UPDATE notification_settings
+               SET min_temp         = 10,
+                   max_temp         = 35,
+                   min_humid        = 30,
+                   max_humid        = 70,
+                   min_press        = 980,
+                   max_press        = 1020,
+                   cold_alert       = 1,
+                   heat_alert       = 1,
+                   dry_alert        = 1,
+                   humid_alert      = 1,
+                   low_press_alert  = 1,
+                   high_press_alert = 1
+             WHERE id = 1
+        """)
+
+    # 5) alerts
+    if not check_table_exists(conn, "alerts"):
+        print("📊 Creating alerts table...")
+        cursor.execute("""
+            CREATE TABLE alerts (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                type      TEXT    NOT NULL,
+                message   TEXT    NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                is_read   INTEGER DEFAULT 0
+            )
+        """)
+        print("✅ alerts table created")
     
-    # Check if device operation history table exists
     if not check_table_exists(conn, "device_operation_history"):
         cursor.execute('''
             CREATE TABLE device_operation_history (
@@ -183,7 +236,6 @@ def init_db():
             )
         ''')
     
-    # Check if device current status table exists
     if not check_table_exists(conn, "device_current_status"):
         cursor.execute('''
             CREATE TABLE device_current_status (
@@ -193,14 +245,13 @@ def init_db():
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+    # Сохраняем все изменения и закрываем соединение
+
     
     conn.commit()
     conn.close()
     
-    if db_exists:
-        print("✅ Database already existed, checked/created necessary tables")
-    else:
-        print("✅ Database newly created with all necessary tables")
 
 # ========================= 
 # save current data
@@ -445,25 +496,46 @@ def is_smart_control_enabled_for_device(device):
 def collect_loop():
     while True:
         try:
-            res = requests.get(BLYNK_API)
+            res  = requests.get(BLYNK_API)
             data = res.json()
-            print("📥 Received:", data)
+            if "error" in data:
+                print("⛔ Blynk error:", data["error"].get("message"))
+                time.sleep(10)
+                continue
+
+            # 1) Запись в sensor_data
             save_to_db(data["v1"], data["v2"], data["v3"], data["v6"], data["v10"])
-            
-            # Check if we need to perform smart control actions
-            # (This would go here if implemented)
-            
+
+            # 2) Вычисление нарушений порогов
+            alerts = evaluate_thresholds(
+                temp=data["v2"],
+                humidity=data["v3"],
+                pressure=data["v10"],
+            )
+
+            # 3) Запись каждого события в таблицу alerts
+            for key, msg in alerts:
+                conn = sqlite3.connect(DB_FILE)
+                c    = conn.cursor()
+                c.execute(
+                    "INSERT INTO alerts(type, message) VALUES(?, ?)",
+                    (key, msg)
+                )
+                conn.commit()
+                conn.close()
+
         except Exception as e:
             print("❌ Error:", e)
-        
-        # Sleep for 10 seconds before next data collection
-        time.sleep(10)
+
+        time.sleep(10000)
 
 # ========================= 
 #  Flask 
 # =========================
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+app.register_blueprint(bp_notification)
+app.register_blueprint(bp_alerts)
 
 @app.route("/latest", methods=["GET", "OPTIONS"])
 def get_latest():
@@ -851,7 +923,45 @@ def add_cors_headers(response):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
+# ========================= 
+# notification logic
+# =========================
+def evaluate_thresholds(temp, humidity, pressure):
+    """
+    Compare temp/humidity/pressure against notification_settings
+    and return a list of (key, message) tuples.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cur  = conn.cursor()
+    row = cur.execute("""
+        SELECT min_temp, max_temp,
+               min_humid, max_humid,
+               min_press, max_press,
+               cold_alert, heat_alert,
+               dry_alert, humid_alert,
+               low_press_alert, high_press_alert
+        FROM notification_settings WHERE id=1
+    """).fetchone()
+    conn.close()
+    if not row:
+        return []
 
+    (min_t, max_t,
+     min_h, max_h,
+     min_p, max_p,
+     flag_cold, flag_heat,
+     flag_dry, flag_humid,
+     flag_lowp, flag_highp) = row
+
+    alerts = []
+    if flag_cold  and temp     < min_t: alerts.append(("cold",      f"Temperature too low: {temp}°C"))
+    if flag_heat  and temp     > max_t: alerts.append(("heat",      f"Temperature too high: {temp}°C"))
+    if flag_dry   and humidity < min_h: alerts.append(("dry",       f"Humidity too low: {humidity}%"))
+    if flag_humid and humidity > max_h: alerts.append(("humid",     f"Humidity too high: {humidity}%"))
+    if flag_lowp  and pressure < min_p: alerts.append(("low_press", f"Pressure too low: {pressure} hPa"))
+    if flag_highp and pressure > max_p: alerts.append(("high_press",f"Pressure too high: {pressure} hPa"))
+
+    return alerts
 # ========================= 
 # main app
 # =========================

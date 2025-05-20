@@ -45,7 +45,7 @@ const Control = () => {
         const data = await response.json();
         console.log("📥 Received settings:", data);
         
-        // 更新状态
+        // update state
         setSmartEnabled(data.V8 === 1);
         
         // Update individual smart controls
