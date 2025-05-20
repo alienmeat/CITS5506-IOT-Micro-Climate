@@ -221,29 +221,33 @@ export default function Dashboard() {
       {
         label: 'Temperature (°C)',
         data: history.slice(-24).map((d) => d.temp),
-        borderColor: 'rgba(239, 68, 68, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#ef4444', // red-500
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
         yAxisID: 'y',
         tension: 0.4,
+        fill: true,
       },
       {
         label: 'Humidity (%)',
         data: history.slice(-24).map((d) => d.humidity),
-        borderColor: 'rgba(59, 130, 246, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#3b82f6', // blue-500
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
         yAxisID: 'y',
         tension: 0.4,
+        fill: true,
       },
       {
         label: 'Pressure (hPa)',
         data: history.slice(-24).map((d) => d.pressure),
-        borderColor: 'rgba(139, 92, 246, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#8b5cf6', // purple-500
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
         yAxisID: 'y1',
         tension: 0.4,
+        fill: true,
       },
     ],
   };
+  
   
   // Light vs Soil chart
   const lightVsSoilData = {
@@ -252,21 +256,24 @@ export default function Dashboard() {
       {
         label: 'Light',
         data: history.slice(-24).map((d) => d.light),
-        borderColor: 'rgba(245, 158, 11, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#f59e0b', // amber-500
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
         yAxisID: 'y',
         tension: 0.4,
+        fill: true,
       },
       {
         label: 'Soil Moisture (%)',
         data: history.slice(-24).map((d) => d.soil),
-        borderColor: 'rgba(5, 150, 105, 1)',
-        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderColor: '#10b981', // emerald-500
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         yAxisID: 'y1',
         tension: 0.4,
+        fill: true,
       },
     ],
   };
+  
   
   // Daily stats comparison chart
   const dayStatsData = {
@@ -275,15 +282,16 @@ export default function Dashboard() {
       {
         label: 'Current',
         data: [data.temp, data.humidity, data.soil],
-        backgroundColor: 'rgba(99, 102, 241, 0.8)',
+        backgroundColor: ['#ef4444', '#3b82f6', '#10b981'], // red, blue, green
       },
       {
         label: '24h Average',
         data: [stats.avg_temp, stats.avg_humidity, stats.avg_soil],
-        backgroundColor: 'rgba(139, 92, 246, 0.5)',
+        backgroundColor: ['rgba(239, 68, 68, 0.3)', 'rgba(59, 130, 246, 0.3)', 'rgba(16, 185, 129, 0.3)'],
       },
     ],
   };
+  
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
